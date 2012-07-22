@@ -1,0 +1,299 @@
+#!/bin/bash
+
+# This program is free software. It comes without any warranty, to
+# the extent permitted by applicable law. You can redistribute it
+# and/or modify it under the terms of the Do What The Fuck You Want
+# To Public License, Version 2, as published by Sam Hocevar. See
+# http://sam.zoy.org/wtfpl/COPYING for more details. */ 
+
+usage() {
+    echo "Usage:" 1>&2
+    echo "    ${bold}unduress${normal} help [command]" 1>&2
+    echo "    ${bold}unduress${normal} encrypt file" 1>&2
+    echo "    ${bold}unduress${normal} decrypt file" 1>&2
+    echo "    ${bold}unduress${normal} key-gen" 1>&2
+    echo "    ${bold}unduress${normal} key-encrypt file keyfile" 1>&2
+    echo "    ${bold}unduress${normal} key-decrypt file keyfile" 1>&2
+    echo "    ${bold}unduress${normal} key-get file" 1>&2
+    echo "    ${bold}unduress${normal} key-attach file keyfile" 1>&2
+    echo "    ${bold}unduress${normal} key-detach file" 1>&2
+}
+
+assert-params() {
+    if [ "$1" -lt "$2" ]; then
+        echo -n "${bold}ERROR${normal}: Too few parameters. " 1>&2
+        usage
+        exit 1
+    elif [ "$1" -gt "$2" ]; then
+        echo -n "${bold}ERROR${normal}: too many parameters. " 1>&2
+        usage
+        exit 1
+    fi
+}
+
+print-help() {
+    if [ "$#" = 0 ]; then
+        usage
+        return 0
+    fi
+    assert-params "$#" 1
+    case "$1" in
+    "help" )    echo "${bold}unduress${normal} help [command]" 1>&2
+                echo -n "With no \"command\" argument, prints a succinct usage guide. " 1>&2
+                echo -n "With an argument, prints a more detailed description of " 1>&2
+                echo "command usage, inputs and outputs. " 1>&2 ;;
+    "encrypt" ) echo "${bold}unduress${normal} encrypt file" 1>&2
+                echo -n "Encrypts a file. Prompts for encryption and duress passwords " 1>&2
+                echo "prints encrypted output." 1>&2 ;;
+    "decrypt" ) echo "${bold}unduress${normal} decrypt file" 1>&2
+                echo -n "Decrypts a file. Prompts for an encryption password, prints " 1>&2
+                echo -n "decrypted output. If an incorrect password is given, prints " 1>&2
+                echo "nothing and returns 1." 1>&2 ;;
+    "key-gen" ) echo "${bold}unduress${normal} key-gen" 1>&2
+                echo -n "Produces a \"keyfile\". Prompts for encryption and duress " 1>&2
+                echo -n "passwords, prints a file with which multiple \"linked\" " 1>&2
+                echo "files can be encrypted and decrypted." 1>&2 ;;
+    "key-encrypt" ) echo "${bold}unduress${normal} key-encrypt file keyfile" 1>&2
+                echo -n "Encrypts a file using a keyfile. Prompts for the encryption " 1>&2
+                echo -n "password of the keyfile, prints a file which can be " 1>&2
+                echo "decrypted only with the same password and keyfile." 1>&2 ;;
+    "key-decrypt" ) echo "${bold}unduress${normal} key-decrypt file keyfile" 1>&2
+                echo -n "Decrypts a file using a keyfile. Prompts for the encryption " 1>&2
+                echo -n "password of the keyfile, prints the successfully decrypted " 1>&2
+                echo "file if correct." 1>&2 ;;
+    "key-get" ) echo "${bold}unduress${normal} key-get" 1>&2
+                echo -n "Generates a keyfile from a file encrypted via " 1>&2
+                echo " \"unduress encrypt\"." 1>&2 ;;
+    "key-attach" ) echo "${bold}unduress${normal} key-attach file keyfile" 1>&2
+                echo -n "Turns a file encrypted with \"unduress key-encrypt\" into a " 1>&2
+                echo -n "file that can be decrypted via \"unduress decrypt\", " 1>&2
+                echo "assuming the keyfile matches." 1>&2 ;;
+    "key-detach" ) echo "${bold}unduress${normal} key-detach file" 1>&2
+                echo -n "Turns a file encrypted with \"unduress encrypt\" into a " 1>&2
+                echo -n "file that can only be decrypted via \"unduress key-decrypt\", " 1>&2
+                echo "with a matching keyfile." 1>&2 ;;
+    * )         echo "ERROR: unknown command" 1>&2
+                exit 1
+    esac
+}
+
+read-pass() {
+    #only prompt if interactive.
+    if [ -t 0 ] && [ -t 2 ]; then echo -n "$1"" password: " 1>&2; fi
+    local pass
+    read -s pass
+    echo ."$pass". #add dots because gpg doesn't like " " as a passphrase
+    if [ -t 0 ] && [ -t 2 ]; then echo 1>&2; fi
+}
+
+key-gen() { assert-params "$#" 0
+    
+    #read both passwords. Only prompt if interactive.
+    local pass; local duress
+    pass=$(read-pass "Encryption")
+    duress=$(read-pass "Duress")
+
+    #working directory. Cleaned up at the end.
+    local tempdir
+    tempdir=$(mktemp -p "${TMPDIR:-.}" -d)
+    cd -- "$tempdir"
+
+    local pass_name; local duress_name
+    #filenames, used as salts for bcrypt later on.
+    pass_name=$(cat /dev/urandom | base64 | head -c22 | tr +/ -_ )
+    duress_name=$(cat /dev/urandom | base64 | head -c22 | tr +/ -_ )
+
+    local server_key; local cryptkey; local resetkey
+    server_key=$(cat /dev/urandom | base64 | head -c32 | tr +/ -_ )
+    read cryptkey resetkey <<<$(curl -s https://unduress.appspot.com/get/"$server_key".txt | tail -n1)
+
+    mkfifo -- "$pass_name";   printf -- %s "$server_key"  > "$pass_name"   &
+    mkfifo -- "$duress_name"; printf -- %s "$resetkey"    > "$duress_name" &
+    #use fifos so we never write the plaintext keys to disk
+
+    #write out password-encrypted keycodes
+    printf -- %s "$pass"   | gpg --batch --passphrase-fd 0 -c -- "$pass_name"
+    printf -- %s "$duress" | gpg --batch --passphrase-fd 0 -c -- "$duress_name"
+    mv -- "$pass_name".gpg "$pass_name"; mv -- "$duress_name".gpg "$duress_name"
+
+    #randomise timestamp order. Probably not necessary, but...
+    touch -- $(
+        if [ $(($RANDOM%2))%2 = 1 ]; then
+            printf -- "%s %s" "$pass_name" "$duress_name";
+        else
+            printf -- "%s %s" "$duress_name" "$pass_name";
+        fi
+    ) #used to randomise the order with `shuf`, but not portable?
+    #randomise storage order. *Definitely* necessary. Write tarfile to stdout.
+    tar -cf - -- $(
+        if [ $(($RANDOM%2))%2 = 1 ]; then
+            printf -- "%s %s" "$pass_name" "$duress_name";
+        else
+            printf -- "%s %s" "$duress_name" "$pass_name";
+        fi
+    )
+    
+    #clean up
+    cd -- "$OLDPWD"
+    rm -rf -- "$tempdir"
+}
+
+
+get() { assert-params "$#" 1
+    
+    local pass
+    pass=$(read-pass "Decryption")
+    
+    local tempdir
+    tempdir=$(mktemp -p "${TMPDIR:-.}" -d)
+    tar -xf "$1" -C"$tempdir"
+    
+    if [ $? != 0 ]; then
+        echo "${bold}ERROR${normal}: Keyfile invalid." 1>&2
+        rm -rf "$tempdir"
+        exit 1
+    elif [ $(ls -1 "$tempdir" | wc -l) != 2 ]; then
+        echo "${bold}ERROR${normal}: Keyfile should include two keys." 1>&2
+        rm -rf "$tempdir"
+        exit 1
+    fi
+    
+    cd "$tempdir"
+
+    for pass_file in ./*; do
+        local send
+        server_key=$(printf -- %s "$pass" | gpg --batch --passphrase-fd 0 -d -- "$pass_file" 2>/dev/null)
+        if [ $? != 0 ]; then continue; fi
+        
+        local cryptkey; local other
+        read cryptkey other <<<$(curl -s https://unduress.appspot.com/get/"$server_key".txt | tail -n1)
+        
+        echo $cryptkey
+    done
+
+    cd -- "$OLDPWD"
+    rm -rf -- "$tempdir"
+}
+
+key-encrypt() { assert-params "$#" 2
+    
+    local password
+    password=$(read-pass "Encryption")
+    
+    local server_key
+    server_key=$(printf -- %s "$password" | get "$2")
+    if [ $? != 0 ]; then
+        echo "${bold}ERROR${normal}: Password or keyfile invalid." 1>&2
+        exit 1
+    fi
+    
+    printf -- %s "$password""$server_key" | gpg --batch --passphrase-fd 0 -c -o- -- "$1"
+
+    if [ $? != 0 ]; then
+        echo "${bold}ERROR${normal}: Encryption failed." 1>&2
+        exit 1
+    fi
+}
+
+key-decrypt() { assert-params "$#" 2
+    
+    local password
+    password=$(read-pass "Encryption")
+    
+    local server_key
+    server_key=$(printf -- %s "$password" | get "$2")
+    if [ $? != 0 ]; then
+        echo "${bold}ERROR${normal}: Password or keyfile invalid." 1>&2
+        exit 1
+    fi
+    
+    printf -- %s "$password""$server_key" | gpg --batch --passphrase-fd 0 -d -- "$1" 2>/dev/null
+    if [ $? != 0 ]; then
+        echo "${bold}ERROR${normal}: Decryption failed." 1>&2
+        exit 1
+    fi
+}
+
+encrypt() { assert-params "$#" 1
+    
+    local password; local duress
+    password=$(read-pass "Encryption")
+    duress=$(read-pass "Duress")
+    
+    local tempfile
+    tempfile=$(mktemp -p "${TMPDIR:-.}")
+    
+    printf -- %s\\n%s "$password" "$duress" | key-gen > "$tempfile"
+    wc -c -- "$tempfile" | cut -f1 -d' '
+    
+    cat -- "$tempfile"
+    
+    printf -- %s "$password" | key-encrypt "$1" "$tempfile"
+    
+    rm -- "$tempfile"
+}
+
+decrypt() { assert-params "$#" 1
+    
+    local password
+    password=$(read-pass "Encryption")
+
+    local tempdir
+    tempdir=$(mktemp -p "${TMPDIR:-.}" -d)
+    mkfifo -- "$tempdir"/key
+    mkfifo -- "$tempdir"/crypt
+    
+    key-get "$1" > "$tempdir"/key &
+    key-detach "$1" > "$tempdir"/crypt &
+    
+    printf -- %s "$password" | key-decrypt "$tempdir"/crypt "$tempdir"/key
+    
+    rm -rf -- "$tempdir"
+}
+
+key-get() { assert-params "$#" 1
+    
+    local size;
+    size=$(head -n1 "$1")
+    tail -n +2 "$1" | head -c"$size"
+}
+key-attach() { assert-params "$#" 2
+    
+    wc -c -- "$2" | cut -f1 -d' '
+    cat -- "$2"
+    cat -- "$1"
+}
+key-detach() { assert-params "$#" 1
+    
+    local size;
+    size=$(head -n1 "$1")
+    tail -n +2 "$1" | tail -c +$((1+$size))
+}
+
+#don't print control chars for bold text if piping/redirecting output
+if [ -t 2 ]; then
+    bold=$(tput bold)
+    normal=$(tput sgr0)
+fi
+
+if [ $# -lt "1" ]; then
+    echo -n "${bold}ERROR${normal}: Too few parameters. " 1>&2
+    usage
+    exit 1
+fi
+case "$1" in
+    "help"        ) shift; print-help "$@" ;;
+    "key-gen"     ) shift; key-gen "$@" ;;
+    "encrypt"     ) shift; encrypt "$@" ;;
+    "decrypt"     ) shift; decrypt "$@" ;;
+    "key-encrypt" ) shift; key-encrypt "$@" ;;
+    "key-get"     ) shift; key-get "$@" ;;
+    "key-attach"  ) shift; key-attach "$@" ;;
+    "key-detach"  ) shift; key-detach "$@" ;;
+    "key-decrypt" ) shift; key-decrypt "$@" ;;
+    *             ) echo -n "${bold}ERROR${normal}: invalid invocation. " 1>&2
+                    usage
+                    exit 1
+esac
+
+exit 0
