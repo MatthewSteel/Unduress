@@ -4,7 +4,7 @@ Unduress
 Deniable duress-codes for disposable encryption
 -----------------------------------------------
 
-Unduress is a service to close one of the last remaining security vectors in your data storage scheme: rubber-hose cryptanalysis. It creates a password scheme that irreversibly locks encrypted files when particular passwords are used.
+Unduress is a service to close one of the last remaining security vectors in your data storage scheme: [rubber-hose cryptanalysis](http://xkcd.com/538/). It creates a password scheme that irreversibly locks encrypted files when particular passwords are used.
 
 Most non-physical countermeasures are ineffective for this purpose — simply deleting the encrypted data will not deter an attacker with the ability and the foresight to first back it up. Unduress works by storing essential keys on a secure remote server where they can be deleted safely.
 
@@ -24,12 +24,12 @@ The Tour
 
 If we give the right password our data ends up in "File2". If we give the wrong password an error is reported and File remains empty. If we give the duress password an error is returned, and the encrypted data is lost forever.
 
-Note that multiple files encrypted with the same password-pairs are not "linked" - using the duress password on one does not disable the others. If you want to be able to disable multiple files at once, see the advanced usage guide.
+Note that multiple files encrypted with the same password-pairs are not "linked" - using the duress password on one does not disable the others. If you want to be able to disable multiple files at once, see the advanced usage guide at the bottom of this page.
 
 Get Unduressed
 --------------
 
-Just download Unduress and you're ready to go, no registration or anything like that. Requires bash, gpg and cURL; TOR is recommended too. Everything on this domain is licensed under the WTFPL.
+Just download the file "[unduress](https://github.com/MatthewSteel/Unduress/blob/master/unduress)" and you're ready to go, no registration or anything like that. Requires bash, gpg and cURL; TOR is recommended too. Unduress is licensed under the [WTFPL](http://sam.zoy.org/wtfpl/).
 
 FAQ:
 ----
@@ -52,11 +52,11 @@ FAQ:
 
 *   **What could happen if the site is compromised?**
 
-        * Loss of encrypted data
+    * Loss of encrypted data
 
-        * "Duress passwords" rendered ineffective.
+    * "Duress passwords" rendered ineffective.
 
-    Detected security breaches are documented here. If you believe that app security has been breached, or if you discover a vulnerability in either the implementation or the abstract mechanism of this service, please contact me.
+    Detected security breaches are documented [here](http://unduress.com/security.html). If you believe that app security has been breached, or if you discover a vulnerability in either the implementation or the abstract mechanism of this service, please [contact me](mailto:admin@unduress.com).
 
 *   **Will you comply with legal requests for data?**
 
@@ -74,7 +74,7 @@ FAQ:
 
     When key1 is accessed (i.e., when you decrypt your data), code2 is reset to a random value. When key2 is accessed (when you type in your duress password), code1 is randomised, and subsequent decryptions relying on it fail.
 
-    Feel free to use this service for your own purposes with our hilarious html, json and plain text interfaces. It might be cool to have a service for triggering duress codes via email or SMS, but I probably won't write it unless I get really damn bored.
+    Feel free to use this service for your own purposes with our hilarious [html](https://unduress.appspot.com/get/4LnMMkZR3Q7Rd57dgDJ_hFqgzMRUXxPr), [json](https://unduress.appspot.com/get/4LnMMkZR3Q7Rd57dgDJ_hFqgzMRUXxPr.json) and [plain text](https://unduress.appspot.com/get/4LnMMkZR3Q7Rd57dgDJ_hFqgzMRUXxPr.txt) interfaces. It might be cool to have a service for triggering duress codes via email or SMS, but I probably won't write it unless I get really damn bored.
     
 *   **Anything else?**
     
