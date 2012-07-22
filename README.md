@@ -1,6 +1,8 @@
 Unduress
 ========
 
+[Tutorial](#the-tour) | [Download](#get-unduressed) | [FAQ](#faq) | [Advanced](#advanced-use) | [Contact me](mailto:admin@unduress.com)
+
 Deniable duress-codes for disposable encryption
 -----------------------------------------------
 
