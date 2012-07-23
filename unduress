@@ -82,7 +82,7 @@ read-pass() {
     if [ -t 0 ] && [ -t 2 ]; then echo -n "$1"" password: " 1>&2; fi
     local pass
     read -s pass
-    echo ."$pass". #add dots because gpg doesn't like " " as a passphrase
+    echo "$pass"
     if [ -t 0 ] && [ -t 2 ]; then echo 1>&2; fi
 }
 
@@ -107,14 +107,9 @@ key-gen() { assert-params "$#" 0
     server_key=$(cat /dev/urandom | base64 | head -c32 | tr +/ -_ )
     read cryptkey resetkey <<<$(curl -s https://unduress.appspot.com/get/"$server_key".txt | tail -n1)
 
-    mkfifo -- "$pass_name";   printf -- %s "$server_key"  > "$pass_name"   &
-    mkfifo -- "$duress_name"; printf -- %s "$resetkey"    > "$duress_name" &
-    #use fifos so we never write the plaintext keys to disk
-
     #write out password-encrypted keycodes
-    printf -- %s "$pass"   | gpg --batch --passphrase-fd 0 -c -- "$pass_name"
-    printf -- %s "$duress" | gpg --batch --passphrase-fd 0 -c -- "$duress_name"
-    mv -- "$pass_name".gpg "$pass_name"; mv -- "$duress_name".gpg "$duress_name"
+    printf -- %s ."$pass".   | gpg --batch --passphrase-fd 0 -c -o- -- <(printf -- %s "$server_key") > "$pass_name"
+    printf -- %s ."$duress". | gpg --batch --passphrase-fd 0 -c -o- -- <(printf -- %s "$resetkey")   > "$duress_name"
 
     #randomise timestamp order. Probably not necessary, but...
     touch -- $(
@@ -162,17 +157,22 @@ get() { assert-params "$#" 1
 
     for pass_file in ./*; do
         local send
-        server_key=$(printf -- %s "$pass" | gpg --batch --passphrase-fd 0 -d -- "$pass_file" 2>/dev/null)
+        server_key=$(printf -- %s ."$pass". | gpg --batch --passphrase-fd 0 -d -- "$pass_file" 2>/dev/null)
         if [ $? != 0 ]; then continue; fi
         
         local cryptkey; local other
         read cryptkey other <<<$(curl -s https://unduress.appspot.com/get/"$server_key".txt | tail -n1)
-        
+                
         echo $cryptkey
+        
+        cd -- "$OLDPWD"
+        rm -rf -- "$tempdir"
+        return 0
     done
 
     cd -- "$OLDPWD"
     rm -rf -- "$tempdir"
+    return 1
 }
 
 key-encrypt() { assert-params "$#" 2
@@ -187,7 +187,7 @@ key-encrypt() { assert-params "$#" 2
         exit 1
     fi
     
-    printf -- %s "$password""$server_key" | gpg --batch --passphrase-fd 0 -c -o- -- "$1"
+    printf -- %s ."$password"."$server_key" | gpg --batch --passphrase-fd 0 -c -o- -- "$1"
 
     if [ $? != 0 ]; then
         echo "${bold}ERROR${normal}: Encryption failed." 1>&2
@@ -207,7 +207,7 @@ key-decrypt() { assert-params "$#" 2
         exit 1
     fi
     
-    printf -- %s "$password""$server_key" | gpg --batch --passphrase-fd 0 -d -- "$1" 2>/dev/null
+    printf -- %s ."$password"."$server_key" | gpg --batch --passphrase-fd 0 -d -- "$1" 2>/dev/null
     if [ $? != 0 ]; then
         echo "${bold}ERROR${normal}: Decryption failed." 1>&2
         exit 1
@@ -236,17 +236,15 @@ encrypt() { assert-params "$#" 1
 decrypt() { assert-params "$#" 1
     
     local password
-    password=$(read-pass "Encryption")
-
+    password=$(read-pass "Decryption")
+    
     local tempdir
     tempdir=$(mktemp -p "${TMPDIR:-.}" -d)
-    mkfifo -- "$tempdir"/key
-    mkfifo -- "$tempdir"/crypt
+    key-get "$1" > "$tempdir"/temp1
+    key-detach "$1" > "$tempdir"/temp2
     
-    key-get "$1" > "$tempdir"/key &
-    key-detach "$1" > "$tempdir"/crypt &
-    
-    printf -- %s "$password" | key-decrypt "$tempdir"/crypt "$tempdir"/key
+    #process substitution didn't seem to work for either one
+    printf -- %s "$password" | key-decrypt "$tempdir"/temp2 "$tempdir"/temp1
     
     rm -rf -- "$tempdir"
 }
@@ -255,7 +253,7 @@ key-get() { assert-params "$#" 1
     
     local size;
     size=$(head -n1 "$1")
-    tail -n +2 "$1" | head -c"$size"
+    tail -n+2 "$1" | head -c"$size"
 }
 key-attach() { assert-params "$#" 2
     
@@ -267,7 +265,7 @@ key-detach() { assert-params "$#" 1
     
     local size;
     size=$(head -n1 "$1")
-    tail -n +2 "$1" | tail -c +$((1+$size))
+    tail -n+2 "$1" | tail -c +$((1+$size))
 }
 
 #don't print control chars for bold text if piping/redirecting output
