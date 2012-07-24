@@ -81,7 +81,7 @@ read-pass() {
     #only prompt if interactive.
     if [ -t 0 ] && [ -t 2 ]; then echo -n "$1"" password: " 1>&2; fi
     local pass
-    read -s pass
+    IFS= read -rs pass
     echo "$pass"
     if [ -t 0 ] && [ -t 2 ]; then echo 1>&2; fi
 }
@@ -156,7 +156,7 @@ get() { assert-params "$#" 1
     cd "$tempdir"
 
     for pass_file in ./*; do
-        local send
+        local server_key
         server_key=$(printf -- %s ."$pass". | gpg --batch --passphrase-fd 0 -d -- "$pass_file" 2>/dev/null)
         if [ $? != 0 ]; then continue; fi
         
