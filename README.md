@@ -73,6 +73,8 @@ FAQ:
     We only keep one thing on the server: matched pairs of random keys and random codes for each key, like so:
 
         (key1, code1) : (key2, code2)
+        
+    All keys and codes are 32-character strings over the alphabet (A-Za-z0-9-_).
 
     When key1 is accessed (i.e., when you decrypt your data), code2 is reset to a random value. When key2 is accessed (when you type in your duress password), code1 is randomised, and subsequent decryptions relying on it fail.
 

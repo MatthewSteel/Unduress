@@ -6,36 +6,36 @@ if [ -t 2 ]; then
 fi
 
 key-gen() {
-    printf -- %s\\n%s " " "-" | ../unduress key-gen > key
+    printf -- %s\\n%s " " "-" | ./unduress key-gen > key
 }
 key-encrypt() {
-    printf -- %s " " | ../unduress key-encrypt temp key > enc.kcrypt
+    printf -- %s " " | ./unduress key-encrypt temp key > enc.kcrypt
 }
 key-decrypt() {
-    diff temp <(printf -- %s " " | ../unduress key-decrypt enc.kcrypt key) >/dev/null
+    diff temp <(printf -- %s " " | ./unduress key-decrypt enc.kcrypt key) >/dev/null
 }
 decrypt-wrong() {
-    printf -- %s "wrong password" | ../unduress key-decrypt enc.kcrypt key 2>/dev/null
+    printf -- %s "wrong password" | ./unduress key-decrypt enc.kcrypt key 2>/dev/null
 }
 decrypt-duress() {
-    printf -- %s "-" | ../unduress key-decrypt enc.kcrypt key 2>/dev/null
+    printf -- %s "-" | ./unduress key-decrypt enc.kcrypt key 2>/dev/null
 }
 decrypt-after() {
-    printf -- %s " " | ../unduress key-decrypt enc.kcrypt key 2>/dev/null
+    printf -- %s " " | ./unduress key-decrypt enc.kcrypt key 2>/dev/null
 }
 attach() {
-    ../unduress key-attach enc.kcrypt key > enc.crypt
-    diff temp <(printf -- %s " " | ../unduress decrypt enc.crypt)
+    ./unduress key-attach enc.kcrypt key > enc.crypt
+    diff temp <(printf -- %s " " | ./unduress decrypt enc.crypt)
 }
 encrypt() {
-    printf -- %s\\n%s " " "-" | ../unduress encrypt temp > temp.c
-    printf -- %s " " | ../unduress decrypt temp.c > temp2
+    printf -- %s\\n%s " " "-" | ./unduress encrypt temp > temp.c
+    printf -- %s " " | ./unduress decrypt temp.c > temp2
     rm temp.c
     
     diff temp2 temp > /dev/null
-    ret = $?
+    ret=$?
     rm temp2
-    return ret
+    return "$ret"
 }
 
 key-gen
